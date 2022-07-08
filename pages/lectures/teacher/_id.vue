@@ -65,6 +65,10 @@ export default {
       page: 0,
       slideLogId: '',
       classStarted: false,
+      lectureOnSnapshot: null,
+      reactionsOnSnapshot: null,
+      currentSlideLogsOnSnapshot: null,
+      currentSlideLogs: []
     }
   },
   head() {
@@ -74,28 +78,56 @@ export default {
   },
   mounted() {
     const database = this.$fire.firestore
-    this.lecture = database
+    this.lectureOnSnapshot = database
       .collection('lectures')
       .doc(this.$route.params.id)
-      .get()
-      .then((doc) => {
+      .onSnapshot((doc) => {
         this.lecture = doc.data()
       })
-    database
-      .collection('lectures')
-      .doc(this.$route.params.id)
-      .collection('reactions')
-      .get()
-      .then((querySnapshot) => {
-        querySnapshot.forEach((doc) => {
-          this.reactions.push({ id: doc.id, data: doc.data() })
-        })
-      })
+    this.reactionsOnSnapshot = this.fetchReactions()
+    this.currentSlideLogsOnSnapshot = this.fetchCurrentSlideLogs()
+  },
+  destroyed() {
+    this.lectureOnSnapshot();
+    this.reactionsOnSnapshot();
+    this.currentSlideLogsOnSnapshot();
+    console.log('destroyed');
+  },
+  updated() {
+    this.currentSlideLogsOnSnapshot();
+    this.currentSlideLogsOnSnapshot = this.fetchCurrentSlideLogs()
+    this.getMoyamoya()
   },
   methods: {
+    fetchReactions() {
+      const database = this.$fire.firestore
+      return database
+        .collection('lectures')
+        .doc(this.$route.params.id)
+        .collection('reactions').onSnapshot((querySnapshot) => {
+          this.reactions = []
+          querySnapshot.forEach((doc) => {
+            this.reactions.push({ id: doc.id, data: doc.data() })
+          })
+        })
+    },
+    fetchCurrentSlideLogs() {
+      const database = this.$fire.firestore
+      return database
+        .collection('lectures/' + this.$route.params.id + '/slideLogs')
+        .where('page', '==', this.page)
+        .onSnapshot(
+          (querySnapshot) => {
+            this.currentSlideLogs = []
+            querySnapshot.forEach((doc) => {
+              this.currentSlideLogs.push({ id: doc.id, data: doc.data() })
+            })
+          }
+        )
+    },
     async nextSlide() {
       const database = this.$fire.firestore
-      await this.getMoyamoya(this.page)
+      this.getMoyamoya(this.page)
       if (this.moyamoya > 50) {
         await this.delay(0.5) // すぐ次のスライドに進むともやもや度の表示が見れないため
         alert('もやもやが爆発する前に復習しましょう！')
@@ -117,7 +149,7 @@ export default {
         this.slideLogId = addedDoc.id
         await this.delay(0.5) // すぐ次のスライドに進むともやもや度の表示が見れないため
         this.page += 1
-        await this.getMoyamoya(this.page)
+        this.getMoyamoya(this.page)
       } else {
         alert('エラーが発生しました')
       }
@@ -176,49 +208,33 @@ export default {
         })
       )
     },
-    async getMoyamoya(page) {
-      const database = this.$fire.firestore
-      const badReaction = this.reaction.filter(
-        (element) => element.data().type === 'bad'
-      )
-      const goodReaction = this.reaction.docs.filter(
-        (element) => element.data().type === 'good'
-      )
-      if (badReaction.length + goodReaction.length === 0) {
+    getMoyamoya(page) {
+      this.moyamoya = 50
+      let allGoodReaction = 0
+      let allBadReaction = 0
+      this.currentSlideLogs.forEach((logsDoc)=>{
+        let endTs = logsDoc.data().endTs
+        const startTs = logsDoc.data().startTs
+        if (logsDoc.data().endTs === null) {
+          endTs = new Date()
+        }
+        const reaction = this.reactions.docs.filter((reactionDoc => reactionDoc.data().ts <= endTs && reactionDoc.data().ts >=startTs))
+        const badReaction = reaction.docs.filter(
+          (element) => element.data().type === 'bad'
+        )
+        const goodReaction = reaction.docs.filter(
+          (element) => element.data().type === 'good'
+        )
+        allBadReaction += badReaction.length
+        allGoodReaction += goodReaction.length
+      })
+      if (allBadReaction.length + allGoodReaction.length === 0) {
         this.moyamoya = 50
       } else {
         this.moyamoya = parseInt(
-          (badReaction / (goodReaction + badReaction)) * 100
+          (allBadReaction / (allGoodReaction + allBadReaction)) * 100
         )
       }
-      // let allGoodReaction = 0
-      // let allBadReaction = 0
-      // const nowSlideLogsDoc = await database
-      //   .collection('lectures/' + this.$route.params.id + '/slideLogs')
-      //   .where('page', '==', page)
-      //   .get()
-      // await Promise.all(
-      //   nowSlideLogsDoc.docs.map(async (doc) => {
-      //     let endTs = doc.data().endTs
-      //     if (doc.data().endTs === null) {
-      //       endTs = new Date()
-      //     }
-      //     const reaction = await database
-      //       .collection('lectures/' + this.$route.params.id + '/reactions')
-      //       .where('ts', '<=', endTs)
-      //       .where('ts', '>=', doc.data().startTs)
-      //       .get()
-      //     const badReaction = reaction.docs.filter(
-      //       (element) => element.data().type === 'bad'
-      //     )
-      //     const goodReaction = reaction.docs.filter(
-      //       (element) => element.data().type === 'good'
-      //     )
-      //     allBadReaction += badReaction.length
-      //     allGoodReaction += goodReaction.length
-      //   })
-      // )
-      
     },
     delay(n) {
       return new Promise(function (resolve) {
