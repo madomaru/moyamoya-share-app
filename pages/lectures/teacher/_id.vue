@@ -178,40 +178,47 @@ export default {
     },
     async getMoyamoya(page) {
       const database = this.$fire.firestore
-      let allGoodReaction = 0
-      let allBadReaction = 0
-      const nowSlideLogsDoc = await database
-        .collection('lectures/' + this.$route.params.id + '/slideLogs')
-        .where('page', '==', page)
-        .get()
-      await Promise.all(
-        nowSlideLogsDoc.docs.map(async (doc) => {
-          let endTs = doc.data().endTs
-          if (doc.data().endTs === null) {
-            endTs = new Date()
-          }
-          const reaction = await database
-            .collection('lectures/' + this.$route.params.id + '/reactions')
-            .where('ts', '<=', endTs)
-            .where('ts', '>=', doc.data().startTs)
-            .get()
-          const badReaction = reaction.docs.filter(
-            (element) => element.data().type === 'bad'
-          )
-          const goodReaction = reaction.docs.filter(
-            (element) => element.data().type === 'good'
-          )
-          allBadReaction += badReaction.length
-          allGoodReaction += goodReaction.length
-        })
+      const badReaction = this.reaction.filter(
+        (element) => element.data().type === 'bad'
       )
-      if (allBadReaction + allGoodReaction === 0) {
+      const goodReaction = this.reaction.docs.filter(
+        (element) => element.data().type === 'good'
+      )
+      if (badReaction.length + goodReaction.length === 0) {
         this.moyamoya = 50
       } else {
         this.moyamoya = parseInt(
-          (allBadReaction / (allGoodReaction + allBadReaction)) * 100
+          (badReaction / (goodReaction + badReaction)) * 100
         )
       }
+      // let allGoodReaction = 0
+      // let allBadReaction = 0
+      // const nowSlideLogsDoc = await database
+      //   .collection('lectures/' + this.$route.params.id + '/slideLogs')
+      //   .where('page', '==', page)
+      //   .get()
+      // await Promise.all(
+      //   nowSlideLogsDoc.docs.map(async (doc) => {
+      //     let endTs = doc.data().endTs
+      //     if (doc.data().endTs === null) {
+      //       endTs = new Date()
+      //     }
+      //     const reaction = await database
+      //       .collection('lectures/' + this.$route.params.id + '/reactions')
+      //       .where('ts', '<=', endTs)
+      //       .where('ts', '>=', doc.data().startTs)
+      //       .get()
+      //     const badReaction = reaction.docs.filter(
+      //       (element) => element.data().type === 'bad'
+      //     )
+      //     const goodReaction = reaction.docs.filter(
+      //       (element) => element.data().type === 'good'
+      //     )
+      //     allBadReaction += badReaction.length
+      //     allGoodReaction += goodReaction.length
+      //   })
+      // )
+      
     },
     delay(n) {
       return new Promise(function (resolve) {
